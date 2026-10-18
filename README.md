@@ -81,7 +81,8 @@ Three examples you will see in the interfaces:
 ## Install on Omarchy
 
 ```bash
-cd ~/Projects/personal/advantage360-manager
+git clone https://github.com/mileniumtick/advantage360-manager
+cd advantage360-manager
 ./contrib/install-omarchy.sh
 ```
 

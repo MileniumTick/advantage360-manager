@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+repository.workspace = true
 description = "Command line entry point for the Kinesis Advantage360 SmartSet manager (gui, tui, detect, validate, export, backup, presets)"
 
 [[bin]]

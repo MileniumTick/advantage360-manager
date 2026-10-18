@@ -9,10 +9,7 @@ rust-version = "1.88"
 authors = ["Josue Chavarria"]
 license = "MIT"
 # The license text is in LICENSE at the repository root.
-#
-# `repository` is deliberately absent rather than set to a placeholder: paste your own URL here
-# once the repository exists, for example
-#     repository = "https://github.com/<you>/advantage360-manager"
+repository = "https://github.com/mileniumtick/advantage360-manager"
 description = "Configure a Kinesis Advantage360 SmartSet USB keyboard (GTK4 GUI + Ratatui TUI over one shared core)"
 
 [workspace.dependencies]

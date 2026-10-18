@@ -5,7 +5,14 @@ name: CI
 # that proves the documented "no GTK, terminal interface only" build still works.
 #
 # Only first-party actions are used (checkout, cache, upload-artifact): the supply chain of a public
-# repository should not depend on third-party action authors for a Rust project.
+# repository should not depend on third-party action authors for a Rust project. They are pinned to
+# their current major version rather than an old one, because the older majors target the deprecated
+# Node 20 runtime.
+#
+# The runner is pinned to ubuntu-24.04 instead of ubuntu-latest on purpose: the `-latest` label
+# migrates to Ubuntu 26.04 on 2026-10-19, and a CI matrix should not change under a green build
+# without someone deciding to. Moving to 26.04 is a one-line change, and CI will say whether GTK4
+# still behaves.
 
 on:
   push:
@@ -23,9 +30,10 @@ permissions:
 jobs:
   verify:
     name: fmt, clippy, 250 tests, release, end-to-end
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install GTK4 development files and Xvfb
         run: |
@@ -40,7 +48,7 @@ jobs:
           rustc --version && cargo --version
 
       - name: Cache the cargo registry and the build directory
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -55,7 +63,7 @@ jobs:
         run: xvfb-run -a bash contrib/verify.sh
 
       - name: Upload the release binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: adv360-config-linux-x86_64
           path: target/release/adv360-config
@@ -63,9 +71,10 @@ jobs:
 
   headless:
     name: terminal interface only, no GTK
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install the Rust toolchain
         run: |
@@ -73,7 +82,7 @@ jobs:
           rustup default stable
 
       - name: Cache the cargo registry and the build directory
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry

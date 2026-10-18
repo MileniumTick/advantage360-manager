@@ -1,0 +1,9 @@
+/target
+**/*.rs.bk
+
+# Local artifacts produced by the application itself (never committed):
+# dated backups of the keyboard configuration files
+/backups/
+# exported and draft configuration files
+/exports/
+/drafts/

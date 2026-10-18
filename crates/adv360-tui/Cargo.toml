@@ -1,0 +1,12 @@
+[package]
+name = "adv360-tui"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Ratatui/Crossterm terminal interface for the Kinesis Advantage360 SmartSet USB keyboard"
+
+[dependencies]
+adv360-core.workspace = true
+ratatui.workspace = true
+crossterm.workspace = true

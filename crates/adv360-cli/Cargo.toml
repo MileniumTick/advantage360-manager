@@ -1,0 +1,20 @@
+[package]
+name = "adv360-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Command line entry point for the Kinesis Advantage360 SmartSet manager (gui, tui, detect, validate, export, backup, presets)"
+
+[[bin]]
+name = "adv360-config"
+path = "src/main.rs"
+
+[features]
+default = ["gui"]
+gui = ["dep:adv360-gui"]
+
+[dependencies]
+adv360-core.workspace = true
+adv360-tui.workspace = true
+adv360-gui = { workspace = true, optional = true }

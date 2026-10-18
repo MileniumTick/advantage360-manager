@@ -821,3 +821,33 @@ fn tui_and_gui_commands_exist_and_do_not_write_to_the_drive() {
     }
     assert_eq!(before, f.snapshot());
 }
+
+#[test]
+fn a_closed_pipe_does_not_panic() {
+    // `adv360-config about | head -1` must behave like any other command line tool: the process
+    // dies from SIGPIPE instead of panicking with an ugly broken-pipe message.
+    use std::process::Stdio;
+    let binary = env!("CARGO_BIN_EXE_adv360-config");
+    let mut child = Command::new(binary)
+        .arg("about")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("the binary must run");
+    // Close the read end immediately, then let the child write into a broken pipe.
+    drop(child.stdout.take());
+    let status = child.wait().expect("the child must exit");
+    let stderr = {
+        let mut buf = String::new();
+        use std::io::Read;
+        if let Some(mut e) = child.stderr.take() {
+            let _ = e.read_to_string(&mut buf);
+        }
+        buf
+    };
+    assert!(
+        !stderr.contains("panicked"),
+        "a closed pipe must not panic: {stderr}"
+    );
+    let _ = status;
+}

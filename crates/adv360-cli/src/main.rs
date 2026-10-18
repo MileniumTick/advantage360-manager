@@ -23,7 +23,26 @@ const EXIT_OK: u8 = 0;
 const EXIT_FAILURE: u8 = 1;
 const EXIT_USAGE: u8 = 2;
 
+/// Restore the default `SIGPIPE` behaviour.
+///
+/// Rust ignores `SIGPIPE` at startup, so a closed pipe — `adv360-config about | head`, or any
+/// pager the operator quits early — turns the next write into a panic with a broken-pipe message.
+/// Every other command line tool dies quietly in that situation, so the default handler is put
+/// back before any output happens.
+#[cfg(unix)]
+fn restore_sigpipe() {
+    // SAFETY: setting a signal disposition to the default handler is always safe, and this runs
+    // before any threads exist.
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
+}
+
+#[cfg(not(unix))]
+fn restore_sigpipe() {}
+
 fn main() -> ExitCode {
+    restore_sigpipe();
     let argv: Vec<String> = std::env::args().skip(1).collect();
     match dispatch(&argv) {
         Ok(code) => ExitCode::from(code),

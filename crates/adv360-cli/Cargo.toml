@@ -22,3 +22,7 @@ serde_json.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+
+# Restoring the default SIGPIPE behaviour needs one libc call; see restore_sigpipe() in main.rs.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

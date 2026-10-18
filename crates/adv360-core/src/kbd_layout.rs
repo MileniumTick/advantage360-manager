@@ -153,12 +153,53 @@ pub fn detect() -> KeyboardLayout {
 }
 
 fn hyprctl(args: &[&str]) -> Option<String> {
-    let out = Command::new("hyprctl").args(args).output().ok()?;
+    let mut cmd = Command::new("hyprctl");
+    cmd.args(args);
+    // Hyprland exports HYPRLAND_INSTANCE_SIGNATURE only inside its own session, so a tool started
+    // from a tmux pane, a systemd unit or an SSH connection will not inherit it. The socket
+    // directory is readable, so the newest instance is used instead of giving up.
+    if std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE").is_none() {
+        if let Some(signature) = discover_hyprland_instance() {
+            cmd.env("HYPRLAND_INSTANCE_SIGNATURE", signature);
+        }
+    }
+    let out = cmd.output().ok()?;
     if !out.status.success() {
         return None;
     }
     Some(String::from_utf8_lossy(&out.stdout).to_string())
 }
+
+/// Find the most recently created Hyprland instance directory.
+fn discover_hyprland_instance() -> Option<String> {
+    let runtime = std::env::var_os("XDG_RUNTIME_DIR")?;
+    let dir = std::path::PathBuf::from(runtime).join("hypr");
+    let mut best: Option<(std::time::SystemTime, String)> = None;
+    for entry in std::fs::read_dir(dir).ok()?.flatten() {
+        let Ok(meta) = entry.metadata() else { continue };
+        if !meta.is_dir() {
+            continue;
+        }
+        let Ok(modified) = meta.modified() else {
+            continue;
+        };
+        let name = entry.file_name().to_string_lossy().to_string();
+        if best.as_ref().is_none_or(|(t, _)| modified > *t) {
+            best = Some((modified, name));
+        }
+    }
+    best.map(|(_, name)| name)
+}
+
+/// Node names Hyprland reports for things that are not real hardware keyboards.
+const VIRTUAL_NODE_HINTS: &[&str] = &[
+    "virtual",
+    "passthrough",
+    "consumer-control",
+    "system-control",
+    "power-button",
+    "video-bus",
+];
 
 fn from_hyprctl_devices() -> Option<KeyboardLayout> {
     let text = hyprctl(&["devices", "-j"])?;
@@ -184,11 +225,13 @@ fn from_hyprctl_devices() -> Option<KeyboardLayout> {
             .and_then(|v| v.as_str())
             .unwrap_or("keyboard")
             .to_string();
-        // Prefer a real hardware keyboard over virtual/consumer-control nodes.
-        let score = if name.to_ascii_lowercase().contains("virtual") {
-            0
-        } else {
+        // Prefer a real hardware keyboard: Hyprland also lists consumer-control, system-control,
+        // passthrough and power-button nodes, which all report the same layout.
+        let lowered = name.to_ascii_lowercase();
+        let score = if VIRTUAL_NODE_HINTS.iter().any(|h| lowered.contains(h)) {
             1
+        } else {
+            2
         };
         let detail = format!(
             "hyprctl devices reported layout '{layout}' for '{name}'{}",
@@ -206,6 +249,10 @@ fn from_hyprctl_devices() -> Option<KeyboardLayout> {
         };
         if best.as_ref().is_none_or(|(s, _)| score > *s) {
             best = Some((score, candidate));
+        }
+        if score == 2 {
+            // A real hardware keyboard was found; stop looking.
+            break;
         }
     }
     best.map(|(_, l)| l)
@@ -537,5 +584,27 @@ mod tests {
         // On a machine without Hyprland this returns the Unknown variant rather than failing.
         let l = detect();
         assert!(!l.layout.is_empty());
+        if l.layout != "unknown" {
+            assert_ne!(l.source, LayoutSource::Unknown);
+            assert!(
+                !l.detail.is_empty(),
+                "detection must say how it found the layout"
+            );
+        }
+    }
+
+    #[test]
+    fn virtual_and_control_nodes_are_recognised_as_not_a_keyboard() {
+        let lowered = "some-consumer-control-thing";
+        assert!(VIRTUAL_NODE_HINTS.iter().any(|h| lowered.contains(h)));
+        assert!(!VIRTUAL_NODE_HINTS
+            .iter()
+            .any(|h| "sonix-draconic".contains(h)));
+    }
+
+    #[test]
+    fn instance_discovery_is_optional_and_never_panics() {
+        // Whatever the environment, this must answer without panicking.
+        let _ = discover_hyprland_instance();
     }
 }

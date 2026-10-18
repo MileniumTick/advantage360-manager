@@ -55,7 +55,7 @@ impl Binding {
 }
 
 /// What changed on one key.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum KeyChangeKind {
     /// The key had no custom line and now has one.
     Added,

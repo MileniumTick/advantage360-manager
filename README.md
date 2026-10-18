@@ -7,6 +7,14 @@ This is for the **SmartSet** model — the one that presents a small virtual fla
 "v-Drive") full of plain `.txt` files. It is **not** for the Advantage360 *Professional*, which
 uses ZMK and is programmed by flashing firmware.
 
+> **Unofficial.** This is an independent, third-party tool. It is not made, endorsed, sponsored or
+> supported by Kinesis. Kinesis, Advantage360, Advantage 360 and SmartSet are trademarks of their
+> respective owners, used here only to say what this tool talks to. The behaviour implemented here
+> comes from the publicly published Kinesis documentation cited below; the manual PDFs are linked
+> to, never redistributed. **Always back up your configuration first** (this tool does it for you)
+> and use it at your own risk: it writes to real hardware via the keyboard's own configuration
+> files.
+
 ## Why this exists
 
 Kinesis ships a SmartSet App for Windows and macOS only. Their own support page says Linux users
@@ -335,3 +343,29 @@ been pushed. Close the v-Drive, or press SmartSet + Hotkey 4 (Refresh). See step
 is section 6.3 of the manual, which also says the drive is always named `Adv360` and that the LEDs
 flash four times when it opens and twice when it closes. Nothing in this tool states a shortcut the
 manual does not.
+
+## License
+
+MIT — see [LICENSE](LICENSE). Copyright (c) 2026 Josue Chavarria.
+
+This project is unofficial and not affiliated with, endorsed by or supported by Kinesis. The
+Kinesis manuals it was written against are linked above and are the property of their authors; this
+repository does not redistribute them. "Kinesis", "Advantage360" and "SmartSet" are trademarks of
+Kinesis, used here only to describe what this tool communicates with.
+
+## Contributing
+
+The project's own verification command is the gate:
+
+```bash
+bash contrib/verify.sh
+```
+
+It runs `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, the
+whole test suite, a release build, and then a real end-to-end pass against a synthetic v-Drive:
+draft without touching the drive, write with `--write --yes`, confirm `settings.txt` is untouched,
+and restore. Changes that leave it red are not finished.
+
+Every behaviour in the core carries the section of the official documentation it comes from; when
+the documentation is silent the code says so (see `DefaultSource`, `TapHoldSupport`) rather than
+guessing. Please keep that property.

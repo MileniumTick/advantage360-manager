@@ -7,3 +7,6 @@
 # exported and draft configuration files
 /exports/
 /drafts/
+
+# default output folder used by the presets command
+/adv360-presets/

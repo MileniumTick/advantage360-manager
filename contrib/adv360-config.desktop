@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Advantage360 SmartSet Manager
+GenericName=Keyboard configuration
+Comment=Configure a Kinesis Advantage360 SmartSet USB keyboard from the v-Drive
+Exec=adv360-config gui
+TryExec=adv360-config
+Icon=adv360-config
+Terminal=false
+StartupNotify=true
+Categories=Settings;HardwareSettings;Utility;
+Keywords=kinesis;advantage360;adv360;smartset;keyboard;remap;layout;macro;tui;

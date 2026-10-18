@@ -1,0 +1,9 @@
+# The toolchain every contributor and CI should use.
+#
+# `stable` rather than a pinned version, because the crate's minimum is declared separately in
+# Cargo.toml (`rust-version = "1.88"`) and that is the number that actually matters. Listing the
+# components here means `cargo fmt` and `cargo clippy` are always available, so the declared gate
+# (`bash contrib/verify.sh`) cannot fail merely because a component was not installed.
+[toolchain]
+channel = "stable"
+components = ["rustfmt", "clippy"]

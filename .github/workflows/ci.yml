@@ -1,0 +1,99 @@
+name: CI
+
+# The declared gate for this repository is `bash contrib/verify.sh`. CI runs exactly that, under a
+# real display so the GTK4 widget tests are exercised instead of skipping, and adds a second job
+# that proves the documented "no GTK, terminal interface only" build still works.
+#
+# Only first-party actions are used (checkout, cache, upload-artifact): the supply chain of a public
+# repository should not depend on third-party action authors for a Rust project.
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: fmt, clippy, 250 tests, release, end-to-end
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install GTK4 development files and Xvfb
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libgtk-4-dev xvfb
+          pkg-config --modversion gtk4
+
+      - name: Install the Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt,clippy
+          rustup default stable
+          rustc --version && cargo --version
+
+      - name: Cache the cargo registry and the build directory
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      # xvfb-run gives the GTK4 tests a display, so build_ui and the widget interaction test build a
+      # real window instead of reporting that no display is available and returning.
+      - name: Project verification command
+        run: xvfb-run -a bash contrib/verify.sh
+
+      - name: Upload the release binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: adv360-config-linux-x86_64
+          path: target/release/adv360-config
+          if-no-files-found: error
+
+  headless:
+    name: terminal interface only, no GTK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt,clippy
+          rustup default stable
+
+      - name: Cache the cargo registry and the build directory
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-headless-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-headless-
+
+      # The README claims this build drops the GTK4 dependency entirely. GTK4 is deliberately not
+      # installed here, so the claim fails loudly if it stops being true.
+      - name: Build without the gui feature
+        run: cargo build --release --locked -p adv360-cli --no-default-features
+
+      - name: Confirm GTK4 really is not in the dependency tree
+        run: |
+          if cargo tree --locked -p adv360-cli --no-default-features | grep -qi gtk4; then
+            echo "gtk4 is still in the tree with --no-default-features" >&2
+            exit 1
+          fi
+          echo "no gtk4 in the dependency tree, as documented"
+
+      - name: Terminal interface tests
+        run: cargo test --locked -p adv360-cli --no-default-features

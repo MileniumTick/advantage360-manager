@@ -28,9 +28,9 @@ run() {
 }
 
 run "Formatting (check only)" cargo fmt --all -- --check
-run "Lints (warnings are errors)" cargo clippy --workspace --all-targets -- -D warnings
-run "Tests" cargo test --workspace
-run "Release build" cargo build --release --workspace
+run "Lints (warnings are errors)" cargo clippy --locked --workspace --all-targets -- -D warnings
+run "Tests" cargo test --locked --workspace
+run "Release build" cargo build --release --locked --workspace
 
 bin="$repo_root/target/release/adv360-config"
 fixture="$work/fake-ADV360"

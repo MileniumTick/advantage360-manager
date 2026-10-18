@@ -18,3 +18,7 @@ gui = ["dep:adv360-gui"]
 adv360-core.workspace = true
 adv360-tui.workspace = true
 adv360-gui = { workspace = true, optional = true }
+serde_json.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

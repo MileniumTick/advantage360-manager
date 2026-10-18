@@ -40,7 +40,10 @@ point in the code where it is used:
 | [Advantage360 SmartSet Action Tokens](https://kinesis-ergo.com/wp-content/uploads/Adv360-SmartSet-Direct-Programming-Action-Tokens-v3-31-23.pdf) | 3-31-23 | every action token |
 | [Advantage360 SmartSet KB360 User's Manual](https://kinesis-ergo.com/wp-content/uploads/Advantage360-SmartSet-KB360-Users-Manual-v10-12-22.pdf) | 10-12-22 | the physical layout, profile 0, the nine programmable profiles, the five layers, the hotkeys being blank by default, the factory actions per layer |
 
-Run `adv360-config about` to print the same list.
+The position map this tool works from has 80 entries: the 76 keys of the two modules — 75 of them
+programmable, the gear-icon SmartSet key being the documented exception — plus the four FS360
+foot-pedal positions. `adv360-config about` prints the same counts, so they can be checked against
+your keyboard at any time.
 
 Where the documentation is silent or ambiguous, this tool says so instead of inventing an answer.
 Three examples you will see in the interfaces:
@@ -99,8 +102,10 @@ through the filesystem, so it works in a remote shell as long as the mount point
 ### The workflow
 
 1. **Open the v-Drive from the keyboard.** Hold the SmartSet key (the gear icon on the right
-   module) and tap the mount shortcut. `adv360-config mount-help` explains it, and both interfaces
-   show the same instructions when no drive is found.
+   module) and tap **Hotkey 3** (the key marked ③, at the left edge of the right module's QWERTY
+   row). The indicator LEDs flash four times to signal that it is opening. The manual calls this
+   section 6.3; `adv360-config mount-help` prints it, and both interfaces show the same
+   instructions when no drive is found.
 2. **Detect.** `adv360-config detect`. If the drive is somewhere unusual, pass `--device PATH`.
 3. **Choose profile and layer.** Profiles 1–9 are programmable. Layer `function1` is the Fn layer,
    already reachable by holding either Fn key.
@@ -109,8 +114,14 @@ through the filesystem, so it works in a remote shell as long as the mount point
    unified diff. Validation groups findings into errors (which block the write) and warnings.
 6. **Back up and write.** The write flow takes a dated backup, writes only the selected profile's
    layout file, verifies it by reading it back, and then tells you how to eject.
-7. **Eject**, then close the v-Drive from the keyboard. Doing it in the other order is what
-   corrupts layout files — the guide warns about exactly this.
+7. **Eject, then close.** Unmount the drive from Linux first, then hold SmartSet and tap Hotkey 3
+   again to close the v-Drive. Doing it in the other order is what corrupts layout files; the
+   Direct Programming Guide warns about exactly this.
+8. **Push the changes.** This step is easy to miss and the manual is explicit about it: "Changes
+   made via the SmartSet App and/or Direct Programming do not go into effect automatically."
+   Closing the v-Drive pushes them — or hold SmartSet and tap **Hotkey 4** (Refresh) to push them
+   while keeping the drive open for further edits. Every successful write from this tool prints
+   this reminder.
 
 ## The proposed symbol and navigation layers
 
@@ -316,3 +327,11 @@ converting it could destroy what the firmware wrote.
 
 **The drive will not eject** — save and close every file you opened from it, then retry. The guide
 lists the per-OS procedure; `adv360-config mount-help` prints the Linux command for your drive.
+
+**I wrote a layout and nothing changed on the keyboard** — the change is on the drive but has not
+been pushed. Close the v-Drive, or press SmartSet + Hotkey 4 (Refresh). See step 8 above.
+
+**Which shortcut opens the v-Drive?** SmartSet + Hotkey 3, and the same shortcut closes it. That
+is section 6.3 of the manual, which also says the drive is always named `Adv360` and that the LEDs
+flash four times when it opens and twice when it closes. Nothing in this tool states a shortcut the
+manual does not.

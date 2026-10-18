@@ -9,6 +9,8 @@ dependencies = [
  "adv360-core",
  "adv360-gui",
  "adv360-tui",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]

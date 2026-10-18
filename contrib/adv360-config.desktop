@@ -8,5 +8,5 @@ TryExec=adv360-config
 Icon=adv360-config
 Terminal=false
 StartupNotify=true
-Categories=Settings;HardwareSettings;Utility;
+Categories=Settings;HardwareSettings;
 Keywords=kinesis;advantage360;adv360;smartset;keyboard;remap;layout;macro;tui;

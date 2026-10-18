@@ -481,21 +481,36 @@ pub fn build(root: &Path, evidence: Vec<String>) -> CoreResult<VDrive> {
     })
 }
 
+/// The documented name of the virtual drive, from the User's Manual §6.3: "The Advantage360
+/// contains a virtual flash drive named 'Adv360'". The casing on a Linux mount point may differ,
+/// which is why detection compares case-insensitively.
+pub const VDRIVE_NAME: &str = "Adv360";
+
+/// The documented shortcut that opens and closes the v-Drive (User's Manual §6.3).
+pub const VDRIVE_SHORTCUT: &str = "hold the SmartSet key and tap Hotkey 3 (the key marked 3 in a \
+                                    circle, at the left edge of the right module's QWERTY row)";
+
 /// Human instructions for mounting the v-Drive, used by both interfaces and by every error path.
+///
+/// Everything here is quoted or paraphrased from the User's Manual §6.3; nothing is assumed.
 pub fn mount_instructions() -> Vec<String> {
     vec![
-        "Connect the keyboard with its own USB cable to the computer (not through a KVM switch or \
-         an unpowered hub if you can avoid it)."
+        "Connect the keyboard with its own USB cable to the computer. The manual warns that the \
+         keyboard may not work through every KVM switch or dock."
             .into(),
-        "Press and hold the SmartSet key (the gear icon on the right module) and tap the mount \
-         shortcut to open the v-Drive."
+        format!("Open the v-Drive: {VDRIVE_SHORTCUT}."),
+        "The indicator LEDs flash four times to signal that the v-Drive is opening, and show blue \
+         while it stays open, which the manual describes as a temporary state."
             .into(),
-        "Wait for a removable volume to appear. On Omarchy/Arch with udisks2 it is normally \
-         mounted at /run/media/$USER/ADV360."
-            .into(),
-        "Re-run detection, or point the tool at the folder explicitly: adv360-config --device \
-         /run/media/$USER/ADV360 detect"
-            .into(),
+        format!(
+            "Wait for a removable volume to appear. It is always named '{VDRIVE_NAME}'; only its \
+             location varies by operating system. On Arch with udisks2 that is normally \
+             /run/media/$USER/{VDRIVE_NAME}."
+        ),
+        format!(
+            "Re-run detection, or point the tool at the folder explicitly: adv360-config --device \
+             /run/media/$USER/{VDRIVE_NAME} detect"
+        ),
         "This tool never runs as root and never mounts the drive itself: the keyboard is the one \
          that presents the v-Drive."
             .into(),
@@ -518,17 +533,29 @@ pub fn eject_instructions(root: &Path) -> Vec<String> {
             out.push("    Then run: udisksctl unmount -b /dev/sdXN".to_string());
         }
     }
+    out.push(format!(
+        "Only then close the v-Drive: {VDRIVE_SHORTCUT}. The manual says the indicator LEDs flash \
+         twice to signal that it is closing."
+    ));
     out.push(
-        "Only after the drive is unmounted, close the v-Drive from the keyboard with the same \
-         SmartSet shortcut."
+        "Unmount first. The Direct Programming Guide warns that removing the v-Drive while the \
+         computer is still writing to it can damage a file and even corrupt the keyboard."
             .to_string(),
     );
-    out.push(
-        "Closing the v-Drive while the computer is still writing can corrupt a layout file; the \
-         guide warns about exactly this."
-            .to_string(),
-    );
+    out.push(refresh_instruction());
     out
+}
+
+/// The step that actually makes a written change take effect.
+///
+/// User's Manual §6.4 is explicit: "Changes made via the SmartSet App and/or Direct Programming do
+/// not go into effect automatically." Closing the v-Drive pushes them, or the Refresh shortcut can
+/// be used to keep the drive open for further edits.
+pub fn refresh_instruction() -> String {
+    "Make the changes take effect: closing the v-Drive pushes them, or hold the SmartSet key and \
+     tap Hotkey 4 (Refresh) to push them while keeping the v-Drive open (User's Manual section \
+     6.4)."
+        .to_string()
 }
 
 /// Resolve the device node that backs a mount point, when possible.
@@ -709,8 +736,27 @@ mod tests {
         let mount = mount_instructions();
         assert!(mount.iter().any(|l| l.contains("/run/media")));
         assert!(mount.iter().any(|l| l.contains("SmartSet")));
-        let eject = eject_instructions(Path::new("/run/media/x/ADV360"));
+        let eject = eject_instructions(Path::new("/run/media/x/Adv360"));
         assert!(eject.iter().any(|l| l.contains("udisksctl")));
         assert!(eject.iter().any(|l| l.contains("corrupt")));
+    }
+
+    #[test]
+    fn the_instructions_quote_the_manual_rather_than_a_guess() {
+        // User's Manual section 6.3 names the shortcut and the volume; section 6.4 says a written
+        // change is pushed by closing the drive or by the Refresh shortcut. These assertions exist
+        // because an earlier version of this tool guessed "F8", which the manual never says.
+        assert!(mount_instructions()
+            .iter()
+            .any(|l| l.contains("Hotkey 3") && l.contains("SmartSet")));
+        assert!(mount_instructions().iter().any(|l| l.contains(VDRIVE_NAME)));
+        let eject = eject_instructions(Path::new("/nonexistent"));
+        assert!(eject.iter().any(|l| l.contains("Hotkey 3")));
+        assert!(eject.iter().any(|l| l.contains("Hotkey 4")));
+        assert!(refresh_instruction().contains("Hotkey 4"));
+        assert!(refresh_instruction().contains("6.4"));
+        for line in mount_instructions().iter().chain(eject.iter()) {
+            assert!(!line.contains("F8"), "the manual never mentions F8: {line}");
+        }
     }
 }

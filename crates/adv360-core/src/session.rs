@@ -1348,9 +1348,8 @@ impl Session {
                 "Verified written file: {} ({} bytes)",
                 outcome.relative_path, outcome.bytes_written
             ),
-            "The keyboard re-reads its configuration when the v-Drive is closed.".to_string(),
-            "Mode changes made from this tool are not visible to the keyboard until then."
-                .to_string(),
+            // The manual is explicit that a written change is not live until it is pushed.
+            device::refresh_instruction(),
         ];
         if self.files[file_index].has_mixed_eol() {
             next_steps.push(

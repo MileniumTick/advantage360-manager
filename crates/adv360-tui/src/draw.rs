@@ -619,6 +619,42 @@ impl App {
     }
 
     fn write_lines(&self) -> Vec<Line<'static>> {
+        // When a write has already happened, the result goes FIRST. It is the line the operator
+        // needs, and burying it under the instructions put it below the fold on a normal terminal.
+        if let Some(report) = &self.write_report {
+            let mut lines = vec![styled_owned(
+                format!(
+                    "WRITE VERIFIED: {} ({} bytes, {} changed line(s)).",
+                    report.relative_path,
+                    report.bytes_written,
+                    report.changed_lines.len()
+                ),
+                Modifier::BOLD,
+            )];
+            lines.push(Line::from(format!(
+                "Backup location: {}",
+                report.backup_directory.display()
+            )));
+            lines.push(Line::from("Next steps:"));
+            for step in &report.next_steps {
+                lines.push(Line::from(format!(" - {step}")));
+            }
+            lines.push(Line::from("Eject before closing from the keyboard:"));
+            for step in &report.eject_instructions {
+                lines.push(Line::from(format!(" - {step}")));
+            }
+            lines.push(Line::from(""));
+            lines.push(Line::from(format!(
+                "Written to the draft file: {} (this was the only file changed).",
+                report.relative_path
+            )));
+            lines.push(Line::from(
+                "Nothing else was touched: settings.txt, the indicator files, every other profile and \
+                 the firmware are untouched.",
+            ));
+            return lines;
+        }
+
         let mut lines = vec![Line::from("WRITE CONFIRMATION (nothing is written yet)")];
         match self.target_relative_path() {
             Some(path) => lines.push(Line::from(format!("Target file: {path}"))),
@@ -656,40 +692,14 @@ impl App {
             lines.push(Line::from(format!(" - {instruction}")));
         }
         lines.push(Line::from(""));
-        match &self.write_report {
-            Some(report) => {
-                lines.push(styled_owned(
-                    format!(
-                        "WRITE VERIFIED: {} ({} bytes, {} changed line(s)).",
-                        report.relative_path,
-                        report.bytes_written,
-                        report.changed_lines.len()
-                    ),
-                    Modifier::BOLD,
-                ));
-                lines.push(Line::from(format!(
-                    "Backup location: {}",
-                    report.backup_directory.display()
-                )));
-                lines.push(Line::from("Next steps:"));
-                for step in &report.next_steps {
-                    lines.push(Line::from(format!(" - {step}")));
-                }
-                lines.push(Line::from("Eject now:"));
-                for step in &report.eject_instructions {
-                    lines.push(Line::from(format!(" - {step}")));
-                }
-            }
-            None => {
-                lines.push(Line::from(
-                    "Press Enter, then type the word WRITE exactly, then Enter again.",
-                ));
-                lines.push(Line::from(format!("Confirmation: {}", self.write_input)));
-                lines.push(Line::from(
-                    "The count above is the only count that will be accepted by the core.",
-                ));
-            }
-        }
+        lines.push(Line::from(
+            "Press Enter, then type the word WRITE exactly, then Enter again.",
+        ));
+        lines.push(Line::from(format!("Confirmation: {}", self.write_input)));
+        lines.push(Line::from(
+            "The count above is the only count that will be accepted by the core, and the core \
+             refuses to write without a verified backup.",
+        ));
         lines
     }
 

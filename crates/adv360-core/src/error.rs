@@ -104,8 +104,9 @@ impl CoreError {
     pub fn recovery_hints(&self) -> Vec<String> {
         match self {
             CoreError::DeviceNotFound { .. } | CoreError::NotAVDrive { .. } => vec![
-                "Mount the v-Drive from the keyboard: press and hold SmartSet, then tap the mount \
-                 shortcut (F8 in the factory layout)."
+                "Mount the v-Drive from the keyboard: hold the SmartSet key and tap Hotkey 3. The \
+                 indicator LEDs flash four times to signal that the v-Drive is opening and show \
+                 blue while it stays open (User's Manual section 6.3)."
                     .into(),
                 "If the shortcut is unknown, see the Advantage360 User's Manual section on mounting \
                  the v-Drive."
@@ -133,7 +134,8 @@ impl CoreError {
                 "Do not close the v-Drive from the keyboard before checking the file.".into(),
             ],
             CoreError::Disconnected { .. } => vec![
-                "Reconnect the keyboard and re-mount the v-Drive.".into(),
+                "Reconnect the keyboard and mount the v-Drive again: hold SmartSet and tap Hotkey 3."
+                    .into(),
                 "The dated backup taken before the write is still valid; restore it if the layout \
                  file is now truncated."
                     .into(),

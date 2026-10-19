@@ -29,7 +29,9 @@ permissions:
 
 jobs:
   verify:
-    name: fmt, clippy, 250 tests, release, end-to-end
+    # No test count in the name: a hard-coded number goes stale the moment a test is
+    # added, and a job name that quietly lies about the suite is worse than a vague one.
+    name: fmt, clippy, tests, release, end-to-end
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:

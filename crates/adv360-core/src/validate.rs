@@ -165,6 +165,24 @@ impl ValidationReport {
     }
 }
 
+/// A finding for a file that exists on the v-Drive but could not be read.
+///
+/// This matters more than it looks: a layout file that is not valid UTF-8 is skipped entirely, so
+/// without this the operator would see a clean report and never learn that one profile is missing
+/// from the session. Found on a real keyboard whose profile 1 was written in ISO-8859-1.
+pub fn unreadable_finding(relative_path: &str, why: &str) -> Finding {
+    Finding::new(
+        Severity::Warning,
+        relative_path,
+        None,
+        "file-unreadable",
+        format!("This file is on the v-Drive but could not be read, so it is not in the session: {why}"),
+    )
+    .with_hint(
+        "It is left completely untouched. Nothing in it is rewritten or lost; convert it to UTF-8          yourself if you want this tool to edit it.",
+    )
+}
+
 /// Validate one configuration file.
 pub fn validate_file(file: &ConfigFile) -> ValidationReport {
     let mut report = ValidationReport::new();
@@ -223,10 +241,19 @@ pub fn validate_file(file: &ConfigFile) -> ValidationReport {
         ));
     }
 
-    validate_layer_headers(file, &mut report);
-    for (idx, line) in file.lines.iter().enumerate() {
-        let number = idx + 1;
-        validate_line(file, line, number, &mut report);
+    // The guide says not to edit settings.txt, and this tool does not claim to understand its
+    // `key=value` format. Reporting every one of its lines as "unrecognised" would be noise on top
+    // of the file-level note that says the only thing that matters: it is never written.
+    let inspect_lines = file.role != FileRole::Settings;
+
+    if inspect_lines {
+        validate_layer_headers(file, &mut report);
+    }
+    if inspect_lines {
+        for (idx, line) in file.lines.iter().enumerate() {
+            let number = idx + 1;
+            validate_line(file, line, number, &mut report);
+        }
     }
     validate_duplicates(file, &mut report);
     validate_macro_trigger_shadowing(file, &mut report);
@@ -775,21 +802,30 @@ fn validate_duplicates(file: &ConfigFile, report: &mut ValidationReport) {
         }
     }
 
-    // (indicator, layer-ish) duplicates for LEDs.
-    let mut led_seen: Vec<(u8, usize)> = Vec::new();
+    // Duplicates for LEDs. The key is the indicator *and* what it displays, because the layer
+    // indicator legitimately carries one line per layer: the guide says it "supports the
+    // assignment of up to 5 colors, one for each layer", and every lighting file written by the
+    // keyboard itself does exactly that (verified against a factory ADV360).
+    let mut led_seen: Vec<((u8, Option<LayerId>), usize)> = Vec::new();
     for (idx, line) in file.lines.iter().enumerate() {
         let LineKind::Led(l) = &line.kind else {
             continue;
         };
-        let key = l.indicator.0;
-        if led_seen.iter().any(|(k, _)| *k == key) {
+        let key = (
+            l.indicator.0,
+            match l.function {
+                crate::model::LedFunction::Layer(layer) => Some(layer),
+                _ => None,
+            },
+        );
+        if let Some((_, first)) = led_seen.iter().find(|(k, _)| *k == key) {
             report.push(Finding::new(
                 Severity::Warning,
                 path,
                 Some(idx + 1),
                 "duplicate-led",
                 format!(
-                    "Indicator {} is defined more than once in this file.",
+                    "Indicator {} is set to the same thing again on line {first}; the last line                      wins.",
                     l.indicator.token()
                 ),
             ));

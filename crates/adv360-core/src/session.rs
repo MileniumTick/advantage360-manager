@@ -1037,8 +1037,15 @@ impl Session {
     }
 
     /// Validate every file in the draft.
+    ///
+    /// Files that could not be read at all are reported too, because a clean report that silently
+    /// omits one profile is worse than a noisy one.
     pub fn validation(&self) -> ValidationReport {
-        validate::validate_files(self.files.iter())
+        let mut report = validate::validate_files(self.files.iter());
+        for (path, why) in &self.skipped {
+            report.push(validate::unreadable_finding(path, why));
+        }
+        report.sorted()
     }
 
     /// Validate only the writable files of a profile set.
@@ -1160,6 +1167,11 @@ impl Session {
             "undo_depth": self.undo_stack.len(),
             "undo_history": self.undo_descriptions(),
             "changed_lines": self.diff().changed_line_count(),
+            // An export that quietly omits a file would be a bad backup, so it says so.
+            "skipped_files": self.skipped.iter().map(|(path, why)| serde_json::json!({
+                "relative_path": path,
+                "reason": why,
+            })).collect::<Vec<_>>(),
         });
         serde_json::to_string_pretty(&manifest).unwrap_or_else(|_| "{}".to_string())
     }
@@ -1248,12 +1260,27 @@ impl Session {
                     .to_string(),
             });
         }
-        let file_index =
-            self.profile_file_index(profile)
-                .ok_or_else(|| CoreError::ReadOnlyFile {
-                    path: PathBuf::from(profile.layout_file_name()),
+        let file_index = match self.profile_file_index(profile) {
+            Some(index) => index,
+            None => {
+                // Distinguish "there is no file" from "there is a file this tool refused to read",
+                // because the second case has a concrete fix and the first does not.
+                let expected = profile.layout_file_name();
+                if let Some((path, why)) = self.skipped.iter().find(|(path, _)| {
+                    path.to_ascii_lowercase()
+                        .ends_with(&expected.to_ascii_lowercase())
+                }) {
+                    return Err(CoreError::Other(format!(
+                        "{path} exists on the v-Drive but could not be read, so {profile} cannot be \
+                         written: {why}"
+                    )));
+                }
+                return Err(CoreError::ReadOnlyFile {
+                    path: PathBuf::from(expected),
                     role: "no layout file for this profile exists on the v-Drive",
-                })?;
+                });
+            }
+        };
         let role = self.files[file_index].role;
         if !role.is_writable() {
             return Err(CoreError::ReadOnlyFile {

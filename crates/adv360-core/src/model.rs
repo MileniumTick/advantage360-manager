@@ -344,10 +344,11 @@ pub enum LedFunction {
 impl LedFunction {
     /// Parse an LED function token.
     ///
-    /// Note the documentation ambiguity this function deliberately preserves: §5.2 lists
-    /// `Base: [layd], Keypad: [layk], Fn: [lay1], Fn2: [lay2], Fn3: [lay]`. The Fn3 entry is
-    /// printed as `lay` (not `lay3`) in the official guide. Both spellings are accepted; the
-    /// literal documented spelling is what this tool generates.
+    /// Note the documentation defect this function works around: §5.2 lists
+    /// `Base: [layd], Keypad: [layk], Fn: [lay1], Fn2: [lay2], Fn3: [lay]`, so the Fn3 entry is
+    /// printed as `lay` while its neighbours are numbered. Every lighting file written by the
+    /// keyboard itself uses `[lay3]`, which was verified against a factory ADV360, so `lay3` is
+    /// what this tool generates. Both spellings are accepted on read.
     pub fn parse(token: &str) -> Option<LedFunction> {
         let t = token.trim();
         let eq = |s: &str| t.eq_ignore_ascii_case(s);
@@ -380,7 +381,12 @@ impl LedFunction {
             LedFunction::Layer(LayerId::Keypad) => "layk",
             LedFunction::Layer(LayerId::Function1) => "lay1",
             LedFunction::Layer(LayerId::Function2) => "lay2",
-            LedFunction::Layer(LayerId::Function3) => "lay",
+            // The Direct Programming Guide section 5.2 prints this as `[lay]` while its
+            // neighbours are `[lay1]` and `[lay2]`. The real firmware writes `[lay3]`: every
+            // lighting file on a factory ADV360 uses it, so `lay3` is what this tool generates.
+            // `lay` is still accepted on read, because a file could have been written by hand
+            // from the guide.
+            LedFunction::Layer(LayerId::Function3) => "lay3",
         }
     }
 }
@@ -762,8 +768,10 @@ mod tests {
             LedFunction::parse("lay2"),
             Some(LedFunction::Layer(LayerId::Function2))
         );
-        // The token this tool generates for Fn3 is the literal one from the guide.
-        assert_eq!(LedFunction::Layer(LayerId::Function3).token(), "lay");
+        // The guide's own lighting files disagree with its text: the keyboard writes `lay3`.
+        // This was verified against a factory ADV360 (all nine lighting files), so `lay3` is what
+        // this tool generates and `lay` is only tolerated on read.
+        assert_eq!(LedFunction::Layer(LayerId::Function3).token(), "lay3");
         assert_eq!(LedFunction::parse("bogus"), None);
     }
 

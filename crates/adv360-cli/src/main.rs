@@ -12,6 +12,7 @@ use adv360_core::error::CoreError;
 use adv360_core::glyph;
 use adv360_core::kbd_layout;
 use adv360_core::layer::{LayerId, ProfileId};
+use adv360_core::parser;
 use adv360_core::positions::{self, KeyBlock};
 use adv360_core::prelude::*;
 use adv360_core::presets;
@@ -93,6 +94,13 @@ struct Options {
     from_backup: Option<PathBuf>,
     access_key: Option<String>,
     preset: Option<String>,
+    position: Option<String>,
+    action: Option<String>,
+    tap: Option<String>,
+    hold: Option<String>,
+    delay: Option<u16>,
+    macro_body: Option<String>,
+    remove: bool,
     write: bool,
     yes: bool,
     json: bool,
@@ -114,6 +122,7 @@ enum Command {
     Backups,
     Presets,
     ApplyPreset,
+    Set,
     Restore,
     MountHelp,
     Fixture,
@@ -147,6 +156,7 @@ fn dispatch(argv: &[String]) -> Result<u8, Failure> {
         Command::Backups => run_backups(&options),
         Command::Presets => run_presets(&options),
         Command::ApplyPreset => run_apply_preset(&options),
+        Command::Set => run_set(&options),
         Command::Restore => run_restore(&options),
         Command::MountHelp => run_mount_help(&options),
         Command::Fixture => run_fixture(&options),
@@ -195,6 +205,20 @@ fn parse(argv: &[String]) -> Result<(Command, Options), Failure> {
             "--from-backup" => options.from_backup = Some(PathBuf::from(take_value(&mut i)?)),
             "--access-key" => options.access_key = Some(take_value(&mut i)?),
             "--preset" => options.preset = Some(take_value(&mut i)?),
+            "--position" => options.position = Some(take_value(&mut i)?),
+            "--action" => options.action = Some(take_value(&mut i)?),
+            "--tap" => options.tap = Some(take_value(&mut i)?),
+            "--hold" => options.hold = Some(take_value(&mut i)?),
+            "--delay" => {
+                let raw = take_value(&mut i)?;
+                options.delay = Some(raw.parse().map_err(|_| {
+                    Failure::Usage(format!(
+                        "--delay expects milliseconds from 1 to 999, got '{raw}'"
+                    ))
+                })?);
+            }
+            "--macro" => options.macro_body = Some(take_value(&mut i)?),
+            "--remove" => options.remove = true,
             "--write" => options.write = true,
             "--yes" => options.yes = true,
             "--json" => options.json = true,
@@ -221,6 +245,7 @@ fn parse(argv: &[String]) -> Result<(Command, Options), Failure> {
                     "backups" => Command::Backups,
                     "presets" => Command::Presets,
                     "apply-preset" => Command::ApplyPreset,
+                    "set" => Command::Set,
                     "restore" => Command::Restore,
                     "mount-help" => Command::MountHelp,
                     "fixture" => Command::Fixture,
@@ -263,6 +288,8 @@ TRY IT WITHOUT THE KEYBOARD
 CHANGE (nothing touches the keyboard unless --write and --yes are both given)
     presets                 Generate the symbol and navigation drafts for review
     apply-preset            Build a draft for one profile (see --preset)
+    set                     Change one key of one layer, the smallest possible edit,
+                            with a backup and a diff before anything is written
     export                  Write the drafts to a directory
     backup                  Take a dated, verified local backup
     restore                 Restore files from a backup set (--from-backup)
@@ -277,6 +304,13 @@ OPTIONS
     --layer NAME            base | keypad | function1 | function2 | function3
     --preset NAME           symbols | navigation | both
     --access-key POS        hk1 | hk3 | caps | rwin | none
+    --position POS          A documented position token, e.g. hk1 or caps
+    --action TOKEN          A documented action token, e.g. q, kp0, fn1s, vol+
+    --tap TOKEN             Tap half of a Tap-and-Hold assignment
+    --hold TOKEN            Hold half of a Tap-and-Hold assignment
+    --delay MS              Tap-and-Hold delay, 1-999 (250 is the manual's suggestion)
+    --macro 'BODY'          Macro body, the text after the '>', e.g. {{-lshf}}{{9}}{{+lshf}}
+    --remove                Remove the binding, restoring the factory action
     --draft DIR             Read draft files from DIR
     --out DIR               Output directory
     --from-backup DIR       Backup set to restore from
@@ -1150,6 +1184,151 @@ fn run_apply_preset(options: &Options) -> Result<u8, Failure> {
     }
     println!();
     println!("Before closing the v-Drive from the keyboard:");
+    for step in &outcome.eject_instructions {
+        println!("  {step}");
+    }
+    Ok(EXIT_OK)
+}
+
+/// Change exactly one key of one layer.
+///
+/// This exists so the smallest possible edit can be made, reviewed and reversed: it is the command
+/// used for the real reversible test against hardware, and it is what an operator wants when they
+/// need to fix one key rather than apply a whole layer.
+fn run_set(options: &Options) -> Result<u8, Failure> {
+    let mut session = open_session(options)?;
+    let profile = options.profile.ok_or_else(|| {
+        Failure::Usage("set needs --profile N (1-9); profile 0 is not programmable".into())
+    })?;
+    let layer = options.layer.ok_or_else(|| {
+        Failure::Usage("set needs --layer (base, keypad, function1, function2, function3)".into())
+    })?;
+    let position = options
+        .position
+        .clone()
+        .ok_or_else(|| Failure::Usage("set needs --position POS".into()))?;
+
+    let assignment = if options.remove {
+        None
+    } else if let Some(body) = &options.macro_body {
+        // Reuse the core parser rather than growing a second one here. The macro is triggered by
+        // the action the position itself produces in this layer, which is what the guide requires.
+        let line = format!("{{{position}}}>{body}");
+        match parser::parse_line(line.clone(), adv360_core::model::Eol::Lf, Some(layer)).kind {
+            adv360_core::model::LineKind::Macro(m) => Some(Assignment::Macro {
+                position: position.clone(),
+                macro_line: m,
+            }),
+            adv360_core::model::LineKind::Invalid { error } => {
+                return Err(Failure::Usage(format!(
+                    "the macro '{line}' is malformed: {error}"
+                )))
+            }
+            other => {
+                return Err(Failure::Usage(format!(
+                    "the macro '{line}' was not understood ({})",
+                    other.describe()
+                )))
+            }
+        }
+    } else if options.tap.is_some() || options.hold.is_some() {
+        let tap = options.tap.clone().ok_or_else(|| {
+            Failure::Usage("Tap-and-Hold needs --tap TOKEN and --hold TOKEN".into())
+        })?;
+        let hold = options.hold.clone().ok_or_else(|| {
+            Failure::Usage("Tap-and-Hold needs --tap TOKEN and --hold TOKEN".into())
+        })?;
+        Some(Assignment::TapAndHold {
+            position: position.clone(),
+            tap,
+            hold,
+            delay_ms: options.delay.unwrap_or(250),
+        })
+    } else {
+        let action = options.action.clone().ok_or_else(|| {
+            Failure::Usage(
+                "set needs --action TOKEN, or --macro, or --tap/--hold, or --remove".into(),
+            )
+        })?;
+        Some(Assignment::Remap {
+            position: position.clone(),
+            action,
+        })
+    };
+
+    let description = session.set_binding(profile, layer, position.as_str(), assignment)?;
+    println!("{description}");
+
+    let index = session.profile_file_index(profile).ok_or_else(|| {
+        Failure::Core(CoreError::ReadOnlyFile {
+            path: PathBuf::from(profile.layout_file_name()),
+            role: "no layout file for this profile",
+        })
+    })?;
+    let changed = session.file_change_count(index);
+    let diff = session
+        .file_diff(index)
+        .ok_or_else(|| Failure::Core(CoreError::Other("no diff available".into())))?;
+    println!();
+    println!(
+        "{}: line(s) {} would change",
+        diff.relative_path,
+        diff.changed_lines
+            .iter()
+            .map(|l| l.to_string())
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+    println!("{}", diff.unified.trim_end());
+
+    let report = session.validation_for_write(profile);
+    println!(
+        "validation: {} error(s), {} warning(s)",
+        report.error_count(),
+        report.warning_count()
+    );
+    if report.blocks_write() {
+        for f in report.errors() {
+            println!(
+                "  error {}:{} {}",
+                f.relative_path,
+                f.line.map(|l| l.to_string()).unwrap_or_else(|| "-".into()),
+                f.message
+            );
+        }
+    }
+
+    if !options.write {
+        println!();
+        println!("Nothing was written. Add --write --yes to send this to the keyboard.");
+        return Ok(EXIT_OK);
+    }
+    if !options.yes {
+        return Err(Failure::Usage(
+            "--write also needs --yes, the explicit confirmation that the change list above was \
+             read"
+                .to_string(),
+        ));
+    }
+
+    let backup = session.backup(&[profile])?;
+    println!();
+    println!("Backup taken first: {}", backup.directory.display());
+    let outcome = session.write_profile(WriteConfirmation {
+        profile,
+        confirmed_by_operator: true,
+        acknowledged_changed_lines: changed,
+    })?;
+    println!(
+        "Wrote {} ({} bytes), verified: {}",
+        outcome.relative_path, outcome.bytes_written, outcome.verified
+    );
+    println!(
+        "Restore with: {APP_NAME} --from-backup {} restore --profile {} --yes",
+        outcome.backup_directory.display(),
+        profile.0
+    );
+    println!();
     for step in &outcome.eject_instructions {
         println!("  {step}");
     }

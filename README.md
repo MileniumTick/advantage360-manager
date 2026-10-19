@@ -259,35 +259,78 @@ be deleted, the Kinesis support page's advice applies — the drive may need rep
 
 ## What was tested, and what was not
 
-**Tested on this machine** (CachyOS, kernel 7.1.5, Rust 1.95.0, GTK4 4.24.1):
+### Against the real keyboard
 
-* `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`,
-  `cargo test --workspace` and `cargo build --release --workspace` all pass. The exact counts are
-  in the report that accompanies this work.
-* The core is covered by unit tests for lossless round trips (CRLF, BOM, missing final newline,
-  comments, unknown instructions, byte-for-byte reread), all nine profiles and five layers, the
-  validation rules, ordering and last-one-wins precedence, Tap-and-Hold, macros with speed,
-  multiplay, fixed and random delays, LED lines, the diff, backups, restore, and write failures
-  including a simulated disconnect.
-* Both interfaces are driven against a synthetic v-Drive fixture, and the GTK4 window is exercised
-  under a real display, not merely compiled.
+An Advantage360 SmartSet was connected and the whole read/write path was exercised on it. The
+results are the reason this tool is trustworthy about it, so they are stated with the raw facts.
+
+**Reading.** Detection found the drive by structure and by its `ADV360` volume label; the firmware
+is **1.0.69** with bootloader 1.3, read from `settings/settings.txt`. Nineteen text files were
+found: nine layouts, nine lighting files and the settings file, plus `firmware/default.upd` and the
+`System Volume Information` directory, which are reported and never touched.
+
+**Lossless round trip.** All eighteen readable files were exported through the parser and compared
+byte for byte with the drive: **18 of 18 identical**, including CRLF endings, the blank lines
+between layer headers, the multi-line layer LEDs and `settings.txt`. The nineteenth is a layout file
+written in ISO-8859-1; the tool refuses to decode it, leaves it untouched and says so.
+
+**Real reversible write.** One key was changed in a spare profile: `[hk1]>[q]`, the guide's own
+first example.
+
+| Check | Result |
+|---|---|
+| Files changed, of nineteen | **exactly one**, verified by SHA-256 across all of them |
+| Before → after | 65 bytes `d37ffff1…` → 76 bytes `c39a3d4b…` |
+| Line endings | CRLF preserved |
+| Read back | `hk1` → `q`, factory action `null`, line 3 |
+| Backup | holds the original bytes exactly |
+| **Behaviour** | **the keyboard typed `q` when that key was pressed on that profile** |
+| Restore | byte for byte identical to before, all nineteen files |
+
+That last row is the one that matters: the firmware really read a file this tool wrote.
+
+**The documentation was wrong in four places, and the real files won.** Each is now a test in
+`crates/adv360-core/tests/real_keyboard_fixtures.rs`, which holds the real content verbatim:
+
+| The documents say | The keyboard actually does |
+|---|---|
+| An unused layout file holds the five layer headers | Nine lines: the headers separated by blank lines, all CRLF |
+| The Fn3 layer LED token is `[lay]` (§5.2) | `[lay3]`, in every lighting file. `lay` is still accepted on read |
+| — | The layer indicator carries one line per layer, which the same section asks for; it is not a duplicate |
+| `settings.txt` is on the drive | It is in `settings/settings.txt` |
+
+**Not tested on hardware, and deliberately so:**
+
+* **LED writes, Tap-and-Hold and macros** were exercised against fixtures, not against the
+  keyboard. Only a plain remap was written to real hardware.
+* **The symbol and navigation presets** were applied to and read back from a real layout file, but
+  their keys were not typed on the keyboard.
+* **Firmware is never touched.** This tool has no update path at all, by design.
+* This keyboard runs **1.0.69**, older than both published releases (1.0.71 and 1.0.80). The
+  guide warns that "some of the features described in this guide may require a firmware update",
+  so that is worth knowing if a documented feature does not appear. Updating firmware is the
+  SmartSet App's job, not this tool's.
+
+### On the development machine
+
+* `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, the whole
+  test suite and `cargo build --release --workspace` all pass; `bash contrib/verify.sh` runs all of
+  that plus a real draft, write and restore against a synthetic v-Drive.
+* The core is covered for lossless round trips (CRLF, BOM, missing final newline, comments,
+  unknown instructions), all nine profiles and five layers, the validation rules, ordering and
+  last-one-wins precedence, Tap-and-Hold, macros with speed, multiplay, fixed and random delays,
+  LED lines, the diff, backups, restore, write failures and a simulated disconnect.
+* Both interfaces are driven against a synthetic v-Drive, and the GTK4 window is built and driven
+  as a real widget tree under a display, not merely compiled.
 * Live layout detection returns `us` from the running Hyprland instance.
 
-**Not tested, and honestly reported as pending:**
+### A note on files this tool cannot read
 
-* **No test against the real keyboard.** The Advantage360 was not connected during this work:
-  `lsusb` showed no Kinesis device and there was no `/run/media/$USER/ADV360`. Everything that
-  touches hardware therefore remains unverified, and in particular:
-  * the real file names and their contents on your v-Drive,
-  * the firmware version in use,
-  * the exact mount shortcut and mount point on your system,
-  * the end-to-end round trip of a real, reversible write to a real profile.
-* The parsers and validators were written from the official documents, so if your keyboard's files
-  contain something the documents do not describe, it will be shown as an unrecognised instruction
-  and preserved untouched, never rewritten.
-
-Run `adv360-config detect` once the keyboard is connected. It will list the real files, and any
-disagreement with the documentation will be visible immediately.
+A layout file that is not valid UTF-8 is skipped and reported, never converted. That is a real case,
+not a hypothetical: profile 1 of the keyboard this was tested against is ISO-8859-1 and also uses
+position and action tokens that appear in no official list, so the firmware ignores every line of it
+and the profile behaves as if it were empty. The tool's answer is to say exactly that and leave the
+file alone, rather than to guess at a file whose syntax is not the documented one.
 
 ## Project layout
 

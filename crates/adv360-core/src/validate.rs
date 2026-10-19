@@ -179,7 +179,9 @@ pub fn unreadable_finding(relative_path: &str, why: &str) -> Finding {
         format!("This file is on the v-Drive but could not be read, so it is not in the session: {why}"),
     )
     .with_hint(
-        "It is left completely untouched. Nothing in it is rewritten or lost; convert it to UTF-8          yourself if you want this tool to edit it.",
+        // One line on purpose: a backslash-continued literal that loses its backslash leaves a run
+        // of indentation spaces inside a message the operator reads. That happened once.
+        "It is left completely untouched. Nothing in it is rewritten or lost; convert it to UTF-8 yourself if you want this tool to edit it.",
     )
 }
 
@@ -825,7 +827,7 @@ fn validate_duplicates(file: &ConfigFile, report: &mut ValidationReport) {
                 Some(idx + 1),
                 "duplicate-led",
                 format!(
-                    "Indicator {} is set to the same thing again on line {first}; the last line                      wins.",
+                    "Indicator {} is set to the same thing again on line {first}; the last line wins.",
                     l.indicator.token()
                 ),
             ));

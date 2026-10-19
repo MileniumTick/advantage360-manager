@@ -158,3 +158,114 @@ mod docs_tests {
         assert_eq!(APP_NAME, "adv360-config");
     }
 }
+
+#[cfg(test)]
+mod message_hygiene {
+    //! A guard against a defect that reached the screen once: a message built with a
+    //! backslash-continued string literal whose backslash was lost keeps the following line's
+    //! indentation as literal spaces, and the operator reads "convert it to UTF-8          yourself".
+    //! Scanning the sources is the only way to cover every message without enumerating every branch
+    //! that can produce one.
+
+    /// Every module of this crate that builds text a person reads.
+    const SOURCES: &[(&str, &str)] = &[
+        ("backup.rs", include_str!("backup.rs")),
+        ("device.rs", include_str!("device.rs")),
+        ("diff.rs", include_str!("diff.rs")),
+        ("error.rs", include_str!("error.rs")),
+        ("glyph.rs", include_str!("glyph.rs")),
+        ("kbd_layout.rs", include_str!("kbd_layout.rs")),
+        ("layer.rs", include_str!("layer.rs")),
+        ("model.rs", include_str!("model.rs")),
+        ("parse_error.rs", include_str!("parse_error.rs")),
+        ("parser.rs", include_str!("parser.rs")),
+        ("positions.rs", include_str!("positions.rs")),
+        ("presets.rs", include_str!("presets.rs")),
+        ("session.rs", include_str!("session.rs")),
+        ("tokens.rs", include_str!("tokens.rs")),
+        ("validate.rs", include_str!("validate.rs")),
+        ("writer.rs", include_str!("writer.rs")),
+    ];
+
+    /// True when a run of two or more spaces sits between two non-space characters, which is what a
+    /// lost continuation backslash leaves behind.
+    fn has_embedded_run(text: &str) -> Option<usize> {
+        let chars: Vec<char> = text.chars().collect();
+        let mut index = 0usize;
+        while index < chars.len() {
+            if chars[index] != ' ' {
+                index += 1;
+                continue;
+            }
+            let start = index;
+            while index < chars.len() && chars[index] == ' ' {
+                index += 1;
+            }
+            // A run at the very start or end of a literal is ordinary padding; only a run sitting
+            // between two visible characters is the defect. Counting the whole run matters: an
+            // earlier version of this detector only looked at four-character windows and missed
+            // runs longer than two spaces, which is exactly what the defect produces.
+            if index - start >= 2 && start > 0 {
+                if let Some(after) = chars.get(index) {
+                    if !after.is_whitespace() {
+                        return Some(start);
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    #[test]
+    fn the_detector_finds_the_defect_it_looks_for() {
+        // A guard that cannot fail is worthless, so the detector is tested against the three real
+        // occurrences and against text that must not be flagged.
+        assert!(has_embedded_run("convert it to UTF-8          yourself").is_some());
+        assert!(has_embedded_run("the last line                      wins.").is_some());
+        assert!(has_embedded_run("two  spaces").is_some());
+        assert!(has_embedded_run("closed \\n                     after the session").is_some());
+        assert!(has_embedded_run("an ordinary sentence, with punctuation.").is_none());
+        assert!(has_embedded_run("02, 03, 04, and 05").is_none());
+        assert!(has_embedded_run("padded        ").is_none());
+        assert!(has_embedded_run("        indented").is_none());
+    }
+
+    #[test]
+    fn no_message_contains_a_broken_string_continuation() {
+        let mut offenders = Vec::new();
+        for (name, source) in SOURCES {
+            for (number, line) in source.lines().enumerate() {
+                let trimmed = line.trim_start();
+                if trimmed.starts_with("//") {
+                    continue;
+                }
+                // Test modules live at the end of each module by convention, and their literals are
+                // expectations rather than messages: `assert_eq!(rendered, "*   [q]>[w]")` is
+                // deliberately full of spaces. Only production text is the operator's to read.
+                if trimmed.starts_with("#[cfg(test)]") {
+                    break;
+                }
+                // Only the first literal on the line, which is where these messages live.
+                let Some(open) = line.find('"') else { continue };
+                let body = &line[open + 1..];
+                let Some(close) = body.find('"') else {
+                    continue;
+                };
+                let literal = &body[..close];
+                if let Some(column) = has_embedded_run(literal) {
+                    offenders.push(format!(
+                        "{name}:{} column {} -> {}",
+                        number + 1,
+                        column + 1,
+                        literal
+                    ));
+                }
+            }
+        }
+        assert!(
+            offenders.is_empty(),
+            "a message keeps indentation spaces, which means a continuation backslash was lost:\n{}",
+            offenders.join("\n")
+        );
+    }
+}

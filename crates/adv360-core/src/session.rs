@@ -1293,7 +1293,7 @@ impl Session {
         if !absolute.exists() {
             return Err(CoreError::Disconnected {
                 detail: format!(
-                    "{} is gone; the keyboard may have been unplugged or the v-Drive closed \n                     after the session was opened",
+                    "{} is gone; the keyboard may have been unplugged or the v-Drive closed after the session was opened",
                     absolute.display()
                 ),
             });

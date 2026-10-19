@@ -299,6 +299,10 @@ That last row is the one that matters: the firmware really read a file this tool
 | — | The layer indicator carries one line per layer, which the same section asks for; it is not a duplicate |
 | `settings.txt` is on the drive | It is in `settings/settings.txt` |
 
+One documented behaviour was also confirmed rather than assumed: deleting a layout file makes the
+keyboard regenerate a blank one, and the regenerated file matched the firmware's own untouched files
+byte for byte.
+
 **Not tested on hardware, and deliberately so:**
 
 * **LED writes, Tap-and-Hold and macros** were exercised against fixtures, not against the
@@ -376,6 +380,17 @@ reports this as `macro-trigger-shadowed`.
 
 **A file is reported as not valid UTF-8** — it is shown read-only rather than converted, because
 converting it could destroy what the firmware wrote.
+
+**A profile's file is unreadable or does nothing** — deleting it is a supported reset. The Direct
+Programming Guide says so in §4.0: "Deleting a layout file will permanently delete its stored remaps
+& macros, but the keyboard will automatically regenerate a blank layout file." That was verified on
+real hardware: after deleting `layouts/layout1.txt`, the file did **not** come back while the v-Drive
+stayed open, and appeared again — 65 bytes, CRLF, five layer headers separated by blank lines — after
+the v-Drive was ejected, closed with SmartSet + Hotkey 3 and reopened. The regenerated file was
+byte-for-byte identical to the firmware's own untouched files. Delete the file, close and reopen the
+v-Drive, mount it again, and you have a clean profile you can edit normally. Keep a copy first if the
+file contains anything you might want: `adv360-config backup --profile N` copies it faithfully even
+when this tool cannot read it.
 
 **The drive will not eject** — save and close every file you opened from it, then retry. The guide
 lists the per-OS procedure; `adv360-config mount-help` prints the Linux command for your drive.
